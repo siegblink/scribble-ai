@@ -5,8 +5,11 @@ import { FaUndo, FaTrash } from 'react-icons/fa';
 import { ReactSketchCanvas, ReactSketchCanvasRef } from 'react-sketch-canvas';
 
 export default function Home() {
-  const [prompt, setPrompt] = useState('');
   const canvasRef = useRef<ReactSketchCanvasRef>(null);
+
+  const [prompt, setPrompt] = useState<string>('');
+  const [error, setError] = useState<string | null>('');
+  const [outputImage, setOutputImage] = useState<string | null>('');
 
   function undo() {
     canvasRef?.current?.undo();
@@ -14,6 +17,41 @@ export default function Home() {
 
   function clear() {
     canvasRef?.current?.clearCanvas();
+  }
+
+  async function generateOutputImage() {
+    // User needs to provide the prompt
+    if (!prompt) {
+      setError('You need to provide a prompt.');
+      return;
+    }
+
+    // Convert sketch to Base64 string
+    const base64 = await canvasRef.current?.exportImage('png');
+    console.info('Base64 string derived from the sketch', base64);
+
+    // Call API to generate AI image
+    if (base64) {
+      await generateAIImage(base64);
+    }
+  }
+
+  async function generateAIImage(base64Image: string) {
+    const response = await fetch('/api/replicate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: base64Image, prompt }),
+    });
+
+    const result = await response.json();
+    console.log('AI image', result);
+
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+
+    setOutputImage(result.output[1]);
   }
 
   return (
@@ -65,13 +103,30 @@ export default function Home() {
           className='rounded-l-lg py-3 px-4 w-full focus:outline-none text-black'
         />
 
-        <button className='rounded-r-lg py-3.5 px-4 ml-1 text-white bg-gradient-to-br from-green-400 to-blue-600 hover:bg-gradient-to-bl focus:ring-4 focus:outline-none focus:ring-green-200 dark:focus:ring-green-800 font-medium text-sm text-center'>
+        <button
+          onClick={generateOutputImage}
+          className='rounded-r-lg py-3.5 px-4 ml-1 text-white bg-gradient-to-br from-green-400 to-blue-600 hover:bg-gradient-to-bl focus:ring-4 focus:outline-none focus:ring-green-200 dark:focus:ring-green-800 font-medium text-sm text-center'
+        >
           Generate
         </button>
       </section>
 
       {/* Output image */}
-      <section className='w-[400px] h-[400px] flex items-center justify-center mx-auto mt-12'></section>
+      <section className='w-[400px] h-[400px] flex items-center justify-center mx-auto mt-12'>
+        {error ? (
+          <div className='flex justify-center'>
+            <p className='text-lg text-red-500'>{error}</p>
+          </div>
+        ) : null}
+
+        {outputImage ? (
+          <img
+            src={outputImage}
+            alt='AI output image'
+            className='object-cover w-full aspect-square rounded-lg mb-12'
+          />
+        ) : null}
+      </section>
     </main>
   );
 }
